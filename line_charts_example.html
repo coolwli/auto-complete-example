@@ -1,328 +1,62 @@
-<!DOCTYPE html>
-<html lang="en">
+$historical_conn = New-Object System.Data.SqlClient.SqlConnection "Data Source=TEKSCR1\SQLEXPRESS;Database=CloudUnited;Integrated Security=True"
+$fiziksel_conn = New-Object System.Data.SqlClient.SqlConnection "Data Source=PGTRPRALS,1453;Initial Catalog=gtreportdb;User Id=preportdb_usr; Password=Le68JqSz5p9MCu1w ;"
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dynamic Charts with Table</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
-    <style>
-        /* General Styles */
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 20px;
-            background-color: #e9ecef;
-        }
+$today = (Get-Date).ToString("yyyy-MM-dd")
 
-        .panel-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px;
-            justify-content: space-between;
-        }
+$query = @"
+SELECT 
+    (SELECT 
+        [Üretici Firma] + '|' + CAST(COUNT(*) AS VARCHAR(10)) + '~' FROM fiziksel GROUP BY [Üretici Firma]
+     FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)') AS üretici_firma,
+	(SELECT 
+        model + '|' + CAST(COUNT(*) AS VARCHAR(10)) + '~' FROM fiziksel GROUP BY model
+     FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)') AS model,
+	 (SELECT 
+        [Cihaz Tipi]+ '|' + CAST(COUNT(*) AS VARCHAR(10)) + '~' FROM fiziksel GROUP BY [Cihaz Tipi]
+     FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)') AS cihaz_tipi,
+	(SELECT 
+        [İşletim Sistemi] + '|' + CAST(COUNT(*) AS VARCHAR(10)) + '~' FROM fiziksel GROUP BY [İşletim Sistemi]
+     FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)') AS isletim_sistemi,
+	(SELECT 
+        [Kapsam-BBVA Metrics] + '|' + CAST(COUNT(*) AS VARCHAR(10)) + '~' FROM fiziksel GROUP BY [Kapsam-BBVA Metrics]
+     FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)') AS kapsam,
+	(SELECT 
+        Enviroment+ '|' + CAST(COUNT(*) AS VARCHAR(10)) + '~' FROM fiziksel GROUP BY Enviroment
+     FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)') AS enviroment,
 
-        .chart-table-wrapper {
-            display: flex;
-            width: 100%;
-        }
+	 (SELECT SUM([Toplam Core Adet]) FROM fiziksel) AS total_core,
+	 (SELECT SUM([Memory (GB)]) FROM fiziksel) AS memory
+"@
 
-        .panel {
-            background-color: #ffffff;
-            border-radius: 8px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-            padding: 15px;
-            width: 80%;
-            min-width: 300px;
-        }
+$fiziksel_conn.Open()
 
-        .table-container {
-            width: 20%;
-            padding-left: 20px;
-        }
+$cmd = $fiziksel_conn.CreateCommand()
+$cmd.CommandText = $query
+$reader = $cmd.ExecuteReader()
 
-        canvas {
-            width: 100%;
-            height: 250px;
-        }
+# Sonuçları oku ve tabloya ekle
+while ($reader.Read()) {
+    $uretici_firma = $reader["üretici_firma"]
+    $model = $reader["model"]
+    $cihaz_tipi = $reader["cihaz_tipi"]
+    $isletim_sistemi = $reader["isletim_sistemi"]
+    $kapsam = $reader["kapsam"]
+    $enviroment = $reader["enviroment"]
+    $total_core = $reader["total_core"]
+    $memory = $reader["memory"]
+    $host_count=
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 13px;
-        }
+    $query=@"
+        INSERT INTO fiziksel_historic 
+        VALUES ('$today','$uretici_firma','$model',$total_core,$memory,'$cihaz_tipi','$isletim_sistemi','$kapsam','$enviroment',$host_count)
 
-        .table-container table {
-            border-radius: 8px;
-            /* Yumuşak köşeler */
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-            /* Gölge */
-            overflow: hidden;
-            /* Köşelerin düzgün görünmesi için */
-        }
+"@
+    $historical_conn.Open()
 
+    $cmd = $historical_conn.CreateCommand()
+    $cmd.CommandText = $query
+    $cmd.ExecuteReader()
+}
 
-        table th,
-        table td {
-            padding: 12px;
-            border: none;
-            text-align: center;
-            transition: background-color 0.3s;
-        }
-
-        table th {
-            background-color: #6c757d;
-            color: white;
-            font-weight: bold;
-        }
-
-        table tr:nth-child(even) {
-            background-color: #f8f9fa;
-        }
-
-        table tr:hover {
-            background-color: #e9ecef;
-        }
-
-        .chart-container {
-            margin-bottom: 20px;
-        }
-
-        /* Date Picker Styles */
-        .date-picker {
-            margin-bottom: 20px;
-            display: flex;
-            gap: 10px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid #ced4da;
-            /* Thin border added */
-        }
-
-        .date-picker label {
-            font-weight: bold;
-            align-self: center;
-            color: #495057;
-            /* Soft color */
-        }
-
-        .date-picker input {
-            padding: 8px;
-            border-radius: 4px;
-            border: 1px solid #ced4da;
-            width: 150px;
-            transition: border-color 0.3s;
-            background-color: #ffffff;
-            /* Soft white */
-        }
-
-        .date-picker input:focus {
-            border-color: #007bff;
-            outline: none;
-        }
-
-        .date-picker button {
-            padding: 8px 12px;
-            border-radius: 4px;
-            border: none;
-            background-color: #007bff;
-            color: white;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
-
-        .date-picker button:hover {
-            background-color: #0056b3;
-        }
-    </style>
-</head>
-
-<body>
-
-    <!-- Date Picker -->
-    <div class="date-picker">
-        <label for="startDate">Start Date:</label>
-        <input type="date" id="startDate">
-        <label for="endDate">End Date:</label>
-        <input type="date" id="endDate">
-        <button id="updateButton">Update</button>
-    </div>
-
-    <!-- Chart and Table Container -->
-    <div id="chart-tables" class="panel-container"></div>
-
-    <script>
-        const allDatasetGroups = [];
-        let allAvailableDates = [];
-
-        // Generate a list of dates
-        const generateDateList = (start, length) => {
-            return Array.from({ length }, (_, i) => {
-                const date = new Date(start);
-                date.setDate(start.getDate() - i);
-                return date.toISOString().split('T')[0];
-            }).reverse();
-        };
-
-        // Simulate dataset generation
-        const generateDatasetSimulation = (length) => {
-            return Array.from({ length: 3 }, (_, i) => ({
-                label: `Dataset ${String.fromCharCode(65 + i)}`,
-                data: Array.from({ length }, () => Math.floor(Math.random() * 30) + 10)
-            }));
-        };
-
-        // Generate random color for datasets
-        const generateRandomColor = () => {
-            const r = Math.floor(Math.random() * 255);
-            const g = Math.floor(Math.random() * 255);
-            const b = Math.floor(Math.random() * 255);
-            return {
-                borderColor: `rgba(${r}, ${g}, ${b}, 1)`,
-                backgroundColor: `rgba(${r}, ${g}, ${b}, 0.2)`
-            };
-        };
-
-        // Create the chart using Chart.js
-        const createChartInstance = (ctx, datasets, dates, chartTitle) => {
-            const chartData = {
-                labels: dates,
-                datasets: datasets.map(({ label, data }) => {
-                    const colors = generateRandomColor();
-                    return {
-                        label,
-                        data: data.map((y, i) => ({ x: dates[i], y })),
-                        borderColor: colors.borderColor,
-                        backgroundColor: colors.backgroundColor,
-                        borderWidth: 2,
-                        tension: 0.1,
-                        pointRadius: 3,
-                        fill: false
-                    };
-                })
-            };
-
-            const chartOptions = {
-                responsive: true,
-                plugins: {
-                    title: { display: true, text: chartTitle },
-                    tooltip: { mode: 'index', intersect: false }
-                },
-                scales: {
-                    x: {
-                        type: 'time',
-                        time: { unit: 'day' },
-                        title: { display: true, text: 'Date' }
-                    },
-                    y: {
-                        title: { display: true, text: 'Value' }
-                    }
-                }
-            };
-
-            return new Chart(ctx, { type: 'line', data: chartData, options: chartOptions });
-        };
-
-        // Create an HTML table for the datasets
-        const createDatasetTable = (datasets) => {
-            const rows = datasets.map(({ label, data }) => `
-                <tr>
-                    <td>${label}</td>
-                    <td>${data[0]}</td>
-                    <td>${data[data.length - 1]}</td>
-                </tr>`).join('');
-
-            return `
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>First Day</th>
-                            <th>Last Day</th>
-                        </tr>
-                    </thead>
-                    <tbody>${rows}</tbody>
-                </table>`;
-        };
-
-        // Initialize charts and tables
-        const initializeChartsAndTables = (datasetGroups, dates) => {
-            const chartTablesContainer = document.getElementById('chart-tables');
-            chartTablesContainer.innerHTML = '';
-
-            datasetGroups.forEach((datasetGroup, index) => {
-                const wrapper = document.createElement('div');
-                wrapper.classList.add('chart-table-wrapper');
-
-                const panel = document.createElement('div');
-                panel.classList.add('panel');
-
-                const chartContainer = document.createElement('div');
-                chartContainer.classList.add('chart-container');
-                const tableContainer = document.createElement('div');
-                tableContainer.classList.add('table-container');
-
-                chartContainer.innerHTML = `<canvas id="chart${index}"></canvas>`;
-                tableContainer.innerHTML = createDatasetTable(datasetGroup.datasets);
-
-                panel.appendChild(chartContainer);
-                wrapper.appendChild(panel);
-                wrapper.appendChild(tableContainer);
-                chartTablesContainer.appendChild(wrapper);
-
-                const ctx = document.getElementById(`chart${index}`).getContext('2d');
-                createChartInstance(ctx, datasetGroup.datasets, dates, datasetGroup.title);
-            });
-        };
-
-        // Fetch initial data
-        const fetchInitialData = () => {
-            const startDate = new Date();
-            allAvailableDates.push(...generateDateList(startDate, 30));
-
-            const simulatedDatasetGroups = [
-                { title: "Money Chart", datasets: generateDatasetSimulation(allAvailableDates.length) },
-                { title: "Age Chart", datasets: generateDatasetSimulation(allAvailableDates.length) },
-                { title: "Temperature Chart", datasets: generateDatasetSimulation(allAvailableDates.length) }
-            ];
-
-            allDatasetGroups.push(...simulatedDatasetGroups);
-            initializeChartsAndTables(simulatedDatasetGroups, allAvailableDates);
-        };
-
-        // Update charts and tables based on date selection
-        document.getElementById('updateButton').addEventListener('click', () => {
-            const startDate = new Date(document.getElementById('startDate').value);
-            const endDate = new Date(document.getElementById('endDate').value);
-
-            if (startDate && endDate && startDate <= endDate) {
-                const filteredDates = allAvailableDates.filter(date => {
-                    const currentDate = new Date(date);
-                    return currentDate >= startDate && currentDate <= endDate;
-                });
-
-                const filteredDatasetGroups = allDatasetGroups.map(group => ({
-                    title: group.title,
-                    datasets: group.datasets.map(dataset => {
-                        const startIndex = allAvailableDates.indexOf(filteredDates[0]);
-                        const endIndex = allAvailableDates.indexOf(filteredDates[filteredDates.length - 1]);
-                        return {
-                            label: dataset.label,
-                            data: dataset.data.slice(startIndex, endIndex + 1)
-                        };
-                    })
-                }));
-
-                initializeChartsAndTables(filteredDatasetGroups, filteredDates);
-            } else {
-                alert("Please select a valid date range.");
-            }
-        });
-
-        // Initialize the application
-        fetchInitialData();
-        document.getElementById('startDate').value = allAvailableDates[0];
-        document.getElementById('endDate').value = allAvailableDates[allAvailableDates.length - 1];
-    </script>
-</body>
-
-</html>
+$fiziksel_conn.Close()
+$historical_conn.Close()
