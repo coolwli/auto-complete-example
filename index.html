@@ -4,222 +4,324 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Auto Complete Example</title>
+    <title>Dynamic Charts with Table</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
     <style>
+        /* General Styles */
         body {
-            font-family: Arial, sans-serif;
-            background-color: #f0f0f0;
-            margin: 0;
-            padding: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #e9ecef;
         }
 
-        .autocomplete {
-            position: relative;
-            margin: auto;
-            width: 100%;
-            max-width: 800px;
+        .panel-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: space-between;
         }
 
-        #autocomplete-input {
+        .chart-table-wrapper {
+            display: flex;
             width: 100%;
+        }
+
+        .panel {
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
             padding: 15px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            font-size: 16px;
-            line-height: 20px;
-            min-height: 60px;
-            resize: none;
+            width: 80%;
+            min-width: 300px;
+        }
+
+        .table-container {
+            width: 20%;
+            padding-left: 20px;
+        }
+
+        canvas {
+            width: 100%;
+            height: 250px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .table-container table {
+            border-radius: 8px;
+            /* Yumuşak köşeler */
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            /* Gölge */
+            overflow: hidden;
+            /* Köşelerin düzgün görünmesi için */
+        }
+
+
+        table th,
+        table td {
+            padding: 12px;
+            border: none;
+            text-align: center;
+            transition: background-color 0.3s;
+        }
+
+        table th {
+            background-color: #6c757d;
+            color: white;
+            font-weight: bold;
+        }
+
+        table tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+
+        table tr:hover {
+            background-color: #e9ecef;
+        }
+
+        .chart-container {
+            margin-bottom: 20px;
+        }
+
+        /* Date Picker Styles */
+        .date-picker {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #ced4da;
+            /* Thin border added */
+        }
+
+        .date-picker label {
+            font-weight: bold;
+            align-self: center;
+            color: #495057;
+            /* Soft color */
+        }
+
+        .date-picker input {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ced4da;
+            width: 150px;
+            transition: border-color 0.3s;
+            background-color: #ffffff;
+            /* Soft white */
+        }
+
+        .date-picker input:focus {
+            border-color: #007bff;
             outline: none;
         }
 
-        #suggestions-list {
-            list-style-type: none;
-            font-size: 14px;
-            line-height: 7px;
-            padding: 0;
-            margin: 5px 0 0;
-            position: absolute;
-            background-color: white;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            width: auto;
-            max-height: 200px;
-            overflow-y: auto;
-            display: none;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            z-index: 1000;
-        }
-
-        #suggestions-list li {
-            padding: 10px;
+        .date-picker button {
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: none;
+            background-color: #007bff;
+            color: white;
             cursor: pointer;
             transition: background-color 0.3s;
         }
 
-        #suggestions-list li.selected {
-            background-color: #e0e0e0;
-        }
-
-        .suggestion-highlight {
-            color: grey;
+        .date-picker button:hover {
+            background-color: #0056b3;
         }
     </style>
 </head>
 
 <body>
-    <h4>Denemek için 'merhaba', 'merak', 'meyve', 'melodi', 'mektup' yaz;</h4>
 
-    <div class="autocomplete">
-        <textarea id="autocomplete-input" placeholder="Kelime girin..." cols="90"></textarea>
-        <ul id="suggestions-list"></ul>
+    <!-- Date Picker -->
+    <div class="date-picker">
+        <label for="startDate">Start Date:</label>
+        <input type="date" id="startDate">
+        <label for="endDate">End Date:</label>
+        <input type="date" id="endDate">
+        <button id="updateButton">Update</button>
     </div>
 
+    <!-- Chart and Table Container -->
+    <div id="chart-tables" class="panel-container"></div>
+
     <script>
-        const inputField = document.getElementById('autocomplete-input');
-        const suggestionsList = document.getElementById('suggestions-list');
-        const wordList = ['merhaba', 'merak', 'meyve', 'melodi', 'mektup'];
-        let currentSelection = -1;
+        const allDatasetGroups = [];
+        let allAvailableDates = [];
 
-        function setSuggestionPosition() {
-            var cursorPosition = inputField.selectionStart;
-            var textBeforeCursor = inputField.value.substring(0, cursorPosition);
-            var lineNumber = 1;
-            var columnNumber = 0;
+        // Generate a list of dates
+        const generateDateList = (start, length) => {
+            return Array.from({ length }, (_, i) => {
+                const date = new Date(start);
+                date.setDate(start.getDate() - i);
+                return date.toISOString().split('T')[0];
+            }).reverse();
+        };
 
-            for (var i = 0; i < textBeforeCursor.length; i++) {
-                if (textBeforeCursor.charAt(i) === '\n' || columnNumber >= inputField.cols) {
-                    lineNumber++;
-                    columnNumber = 0;
-                } else {
-                    columnNumber++;
+        // Simulate dataset generation
+        const generateDatasetSimulation = (length) => {
+            return Array.from({ length: 3 }, (_, i) => ({
+                label: `Dataset ${String.fromCharCode(65 + i)}`,
+                data: Array.from({ length }, () => Math.floor(Math.random() * 30) + 10)
+            }));
+        };
+
+        // Generate random color for datasets
+        const generateRandomColor = () => {
+            const r = Math.floor(Math.random() * 255);
+            const g = Math.floor(Math.random() * 255);
+            const b = Math.floor(Math.random() * 255);
+            return {
+                borderColor: `rgba(${r}, ${g}, ${b}, 1)`,
+                backgroundColor: `rgba(${r}, ${g}, ${b}, 0.2)`
+            };
+        };
+
+        // Create the chart using Chart.js
+        const createChartInstance = (ctx, datasets, dates, chartTitle) => {
+            const chartData = {
+                labels: dates,
+                datasets: datasets.map(({ label, data }) => {
+                    const colors = generateRandomColor();
+                    return {
+                        label,
+                        data: data.map((y, i) => ({ x: dates[i], y })),
+                        borderColor: colors.borderColor,
+                        backgroundColor: colors.backgroundColor,
+                        borderWidth: 2,
+                        tension: 0.1,
+                        pointRadius: 3,
+                        fill: false
+                    };
+                })
+            };
+
+            const chartOptions = {
+                responsive: true,
+                plugins: {
+                    title: { display: true, text: chartTitle },
+                    tooltip: { mode: 'index', intersect: false }
+                },
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: { unit: 'day' },
+                        title: { display: true, text: 'Date' }
+                    },
+                    y: {
+                        title: { display: true, text: 'Value' }
+                    }
                 }
-            }
+            };
 
-            var computedStyles = window.getComputedStyle(inputField);
-            var paddingLeft = parseFloat(computedStyles.paddingLeft);
-            var paddingTop = parseFloat(computedStyles.paddingTop);
-            var lineHeight = parseInt(computedStyles.lineHeight);
-            var fontSize = parseInt(computedStyles.fontSize);
-            var letterWidth = fontSize * 0.55;
+            return new Chart(ctx, { type: 'line', data: chartData, options: chartOptions });
+        };
 
-            suggestionsList.style.left = (columnNumber * letterWidth + paddingLeft) + 'px';
-            suggestionsList.style.top = (lineNumber * lineHeight + paddingTop) + 'px';
-        }
+        // Create an HTML table for the datasets
+        const createDatasetTable = (datasets) => {
+            const rows = datasets.map(({ label, data }) => `
+                <tr>
+                    <td>${label}</td>
+                    <td>${data[0]}</td>
+                    <td>${data[data.length - 1]}</td>
+                </tr>`).join('');
 
+            return `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>First Day</th>
+                            <th>Last Day</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>`;
+        };
 
-        function displaySuggestions(suggestions, currentWord) {
-            if (suggestions.length === 0) {
-                suggestionsList.style.display = 'none';
-                return;
-            }
-            suggestionsList.innerHTML = suggestions.map((suggestion, index) => {
-                const suggestionText = suggestion.slice(currentWord.length);
-                const isSelected = index === currentSelection ? 'selected' : '';
-                return `<li class="${isSelected}"><span>${currentWord}</span><span class="suggestion-highlight">${suggestionText}</span></li>`;
-            }).join('');
+        // Initialize charts and tables
+        const initializeChartsAndTables = (datasetGroups, dates) => {
+            const chartTablesContainer = document.getElementById('chart-tables');
+            chartTablesContainer.innerHTML = '';
 
-            setSuggestionPosition();
-            suggestionsList.style.display = 'block';
-            addSuggestionEventListeners();
-        }
+            datasetGroups.forEach((datasetGroup, index) => {
+                const wrapper = document.createElement('div');
+                wrapper.classList.add('chart-table-wrapper');
 
-        function addSuggestionEventListeners() {
-            suggestionsList.querySelectorAll('li').forEach((item, index) => {
-                item.addEventListener('click', () => insertSuggestion(item.textContent));
-                item.addEventListener('mouseover', () => {
-                    currentSelection = index;
-                    updateSelection();
+                const panel = document.createElement('div');
+                panel.classList.add('panel');
+
+                const chartContainer = document.createElement('div');
+                chartContainer.classList.add('chart-container');
+                const tableContainer = document.createElement('div');
+                tableContainer.classList.add('table-container');
+
+                chartContainer.innerHTML = `<canvas id="chart${index}"></canvas>`;
+                tableContainer.innerHTML = createDatasetTable(datasetGroup.datasets);
+
+                panel.appendChild(chartContainer);
+                wrapper.appendChild(panel);
+                wrapper.appendChild(tableContainer);
+                chartTablesContainer.appendChild(wrapper);
+
+                const ctx = document.getElementById(`chart${index}`).getContext('2d');
+                createChartInstance(ctx, datasetGroup.datasets, dates, datasetGroup.title);
+            });
+        };
+
+        // Fetch initial data
+        const fetchInitialData = () => {
+            const startDate = new Date();
+            allAvailableDates.push(...generateDateList(startDate, 30));
+
+            const simulatedDatasetGroups = [
+                { title: "Money Chart", datasets: generateDatasetSimulation(allAvailableDates.length) },
+                { title: "Age Chart", datasets: generateDatasetSimulation(allAvailableDates.length) },
+                { title: "Temperature Chart", datasets: generateDatasetSimulation(allAvailableDates.length) }
+            ];
+
+            allDatasetGroups.push(...simulatedDatasetGroups);
+            initializeChartsAndTables(simulatedDatasetGroups, allAvailableDates);
+        };
+
+        // Update charts and tables based on date selection
+        document.getElementById('updateButton').addEventListener('click', () => {
+            const startDate = new Date(document.getElementById('startDate').value);
+            const endDate = new Date(document.getElementById('endDate').value);
+
+            if (startDate && endDate && startDate <= endDate) {
+                const filteredDates = allAvailableDates.filter(date => {
+                    const currentDate = new Date(date);
+                    return currentDate >= startDate && currentDate <= endDate;
                 });
-            });
-        }
 
-        function insertSuggestion(suggestion) {
-            const caretPosition = inputField.selectionStart;
-            let textBeforeCaret = inputField.value.substring(0, caretPosition);
-            const lastSpaceIndex = Math.max(textBeforeCaret.lastIndexOf(' '), textBeforeCaret.lastIndexOf('\n'));
-            textBeforeCaret = lastSpaceIndex !== -1 ? textBeforeCaret.substring(0, lastSpaceIndex + 1) : '';
-            let textAfterCaret = inputField.value.substring(caretPosition);
-            const nextSpaceIndex = Math.min(
-                textAfterCaret.indexOf(' ') === -1 ? textAfterCaret.length : textAfterCaret.indexOf(' '),
-                textAfterCaret.indexOf('\n') === -1 ? textAfterCaret.length : textAfterCaret.indexOf('\n')
-            );
-            textAfterCaret = textAfterCaret.substring(nextSpaceIndex);
-            inputField.value = textBeforeCaret + suggestion + (textAfterCaret[0] === ' ' ? '' : ' ') + textAfterCaret;
-            const newCaretPosition = textBeforeCaret.length + suggestion.length + 1;
-            inputField.setSelectionRange(newCaretPosition, newCaretPosition);
-            suggestionsList.style.display = 'none';
-            inputField.focus();
-        }
+                const filteredDatasetGroups = allDatasetGroups.map(group => ({
+                    title: group.title,
+                    datasets: group.datasets.map(dataset => {
+                        const startIndex = allAvailableDates.indexOf(filteredDates[0]);
+                        const endIndex = allAvailableDates.indexOf(filteredDates[filteredDates.length - 1]);
+                        return {
+                            label: dataset.label,
+                            data: dataset.data.slice(startIndex, endIndex + 1)
+                        };
+                    })
+                }));
 
-        function autoResize() {
-            inputField.style.height = 'auto';
-            inputField.style.height = `${inputField.scrollHeight}px`;
-        }
-
-        function updateSelection() {
-            const items = suggestionsList.querySelectorAll('li');
-            items.forEach((item, index) => {
-                item.classList.toggle('selected', index === currentSelection);
-            });
-        }
-
-        function handleKeyDown(event) {
-            if (event.key === 'Tab' && suggestionsList.style.display !== 'none') {
-                event.preventDefault();
-                const selectedSuggestion = suggestionsList.querySelector('li.selected') || suggestionsList.querySelector('li');
-                if (selectedSuggestion) {
-                    insertSuggestion(selectedSuggestion.textContent);
-                }
+                initializeChartsAndTables(filteredDatasetGroups, filteredDates);
+            } else {
+                alert("Please select a valid date range.");
             }
-            else if (event.key === 'Enter' && currentSelection !== -1) {
-                event.preventDefault();
-                const selectedSuggestion = suggestionsList.querySelector('li.selected');
-                if (selectedSuggestion) {
-                    insertSuggestion(selectedSuggestion.textContent);
-                }
-            }
-            else if (event.key === 'Escape') {
-                suggestionsList.style.display = 'none';
-            }
-            else if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && suggestionsList.style.display !== 'none') {
-                event.preventDefault();
-                navigateSuggestions(event.key === 'ArrowDown' ? 1 : -1);
-            }
-            autoResize();
-        }
+        });
 
-        function handleKeyUp(event) {
-            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-                return;
-            }
-            updateSuggestions();
-        }
-
-        function navigateSuggestions(direction) {
-            currentSelection = (currentSelection + direction + suggestionsList.childElementCount) % suggestionsList.childElementCount;
-            updateSelection();
-        }
-
-        function handleClickOutside(event) {
-            if (!event.target.closest('.autocomplete')) {
-                suggestionsList.style.display = 'none';
-            }
-        }
-
-        function updateSuggestions() {
-            const caretPosition = inputField.selectionStart;
-            const words = inputField.value.substring(0, caretPosition).split(/\s+/);
-            const currentWord = words[words.length - 1].toLowerCase();
-            const suggestions = currentWord.length >= 2 ? wordList.filter(word => word.startsWith(currentWord) && word !== currentWord) : [];
-            currentSelection = -1;
-            displaySuggestions(suggestions, currentWord);
-        }
-
-        inputField.addEventListener('keydown', handleKeyDown);
-        inputField.addEventListener('keyup', handleKeyUp);
-        inputField.addEventListener('input', updateSuggestions);
-        document.addEventListener('click', handleClickOutside);
+        // Initialize the application
+        fetchInitialData();
+        document.getElementById('startDate').value = allAvailableDates[0];
+        document.getElementById('endDate').value = allAvailableDates[allAvailableDates.length - 1];
     </script>
 </body>
 
