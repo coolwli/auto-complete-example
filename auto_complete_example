@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auto Complete Example</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #1e1e1e;
+            color: #e0e0e0;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .autocomplete {
+            position: relative;
+            margin: auto;
+            width: 100%;
+            max-width: 800px;
+        }
+
+        .textarea-container {
+            position: relative;
+            width: 100%;
+        }
+
+        #autocomplete-input {
+            width: 100%;
+            padding: 15px;
+            border: 1px solid #333;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+            font-size: 16px;
+            line-height: 20px;
+            min-height: 60px;
+            resize: none;
+            outline: none;
+            background-color: #2e2e2e;
+            color: #e0e0e0;
+        }
+
+        .submit-button {
+            position: absolute;
+            bottom: 15px;
+            right: -10px;
+            width: 30px;
+            height: 30px;
+            background-color: #bbbbbb;
+            border: none;
+            border-radius: 50%;
+            background-image: url('right-arrow.png');
+            background-size: 65%;
+            background-position: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.7);
+            background-repeat: no-repeat;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+
+        .submit-button:hover,
+        .submit-button-active {
+            background-color: #666666;
+        }
+
+        #suggestions-list {
+            list-style-type: none;
+            font-size: 14px;
+            line-height: 1;
+            padding: 0;
+            margin: 5px 0 0;
+            position: absolute;
+            background-color: #333;
+            border: 1px solid #444;
+            border-radius: 5px;
+            width: auto;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+        }
+
+        #suggestions-list li {
+            padding: 10px;
+            cursor: pointer;
+            color: #e0e0e0;
+        }
+
+        #suggestions-list li.selected {
+            background-color: #444;
+        }
+
+        .suggestion-highlight {
+            color: #b0b0b0;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="autocomplete">
+        <div class="textarea-container">
+            <textarea id="autocomplete-input" placeholder="Type a word..." cols="90"></textarea>
+            <button class="submit-button"></button>
+        </div>
+
+        <ul id="suggestions-list"></ul>
+    </div>
+
+    <script>
+        const inputField = document.getElementById('autocomplete-input');
+        const suggestionsList = document.getElementById('suggestions-list');
+        const submitButton = document.querySelector('.submit-button');
+        const wordList = ['merhaba', 'merak', 'meyve', 'melodi', 'mektup'];
+        let currentSelection = -1;
+
+        function setSuggestionPosition() {
+            var cursorPosition = inputField.selectionStart;
+            var textBeforeCursor = inputField.value.substring(0, cursorPosition);
+            var lineNumber = 1;
+            var columnNumber = 0;
+
+            for (var i = 0; i < textBeforeCursor.length; i++) {
+                if (textBeforeCursor.charAt(i) === '\n' || columnNumber >= inputField.cols) {
+                    lineNumber++;
+                    columnNumber = 0;
+                } else {
+                    columnNumber++;
+                }
+            }
+
+            var computedStyles = window.getComputedStyle(inputField);
+            var paddingLeft = parseFloat(computedStyles.paddingLeft);
+            var paddingTop = parseFloat(computedStyles.paddingTop);
+            var lineHeight = parseInt(computedStyles.lineHeight);
+            var fontSize = parseInt(computedStyles.fontSize);
+            var letterWidth = fontSize * 0.55;
+
+            suggestionsList.style.left = (columnNumber * letterWidth + paddingLeft) + 'px';
+            suggestionsList.style.top = (lineNumber * lineHeight + paddingTop) + 'px';
+        }
+
+        function displaySuggestions(suggestions, currentWord) {
+            if (suggestions.length === 0) {
+                suggestionsList.style.display = 'none';
+                return;
+            }
+            suggestionsList.innerHTML = suggestions.map((suggestion, index) => {
+                const suggestionText = suggestion.slice(currentWord.length);
+                const isSelected = index === currentSelection ? 'selected' : '';
+                return `<li class="${isSelected}"><span>${currentWord}</span><span class="suggestion-highlight">${suggestionText}</span></li>`;
+            }).join('');
+
+            setSuggestionPosition();
+            suggestionsList.style.display = 'block';
+            addSuggestionEventListeners();
+        }
+
+        function addSuggestionEventListeners() {
+            suggestionsList.querySelectorAll('li').forEach((item, index) => {
+                item.addEventListener('click', () => insertSuggestion(item.textContent));
+                item.addEventListener('mouseover', () => {
+                    currentSelection = index;
+                    updateSelection();
+                });
+            });
+        }
+
+        function insertSuggestion(suggestion) {
+            const caretPosition = inputField.selectionStart;
+            let textBeforeCaret = inputField.value.substring(0, caretPosition);
+            const lastSpaceIndex = Math.max(textBeforeCaret.lastIndexOf(' '), textBeforeCaret.lastIndexOf('\n'));
+            textBeforeCaret = lastSpaceIndex !== -1 ? textBeforeCaret.substring(0, lastSpaceIndex + 1) : '';
+            let textAfterCaret = inputField.value.substring(caretPosition);
+            const nextSpaceIndex = Math.min(
+                textAfterCaret.indexOf(' ') === -1 ? textAfterCaret.length : textAfterCaret.indexOf(' '),
+                textAfterCaret.indexOf('\n') === -1 ? textAfterCaret.length : textAfterCaret.indexOf('\n')
+            );
+            textAfterCaret = textAfterCaret.substring(nextSpaceIndex);
+            inputField.value = textBeforeCaret + suggestion + (textAfterCaret[0] === ' ' ? '' : ' ') + textAfterCaret;
+            const newCaretPosition = textBeforeCaret.length + suggestion.length + 1;
+            inputField.setSelectionRange(newCaretPosition, newCaretPosition);
+            suggestionsList.style.display = 'none';
+            inputField.focus();
+        }
+
+        function autoResize() {
+            inputField.style.height = 'auto';
+            inputField.style.height = `${inputField.scrollHeight}px`;
+        }
+
+        function updateSelection() {
+            const items = suggestionsList.querySelectorAll('li');
+            items.forEach((item, index) => {
+                item.classList.toggle('selected', index === currentSelection);
+            });
+        }
+
+        function handleKeyDown(event) {
+            if (event.key === 'Tab' && suggestionsList.style.display !== 'none') {
+                event.preventDefault();
+                const selectedSuggestion = suggestionsList.querySelector('li.selected') || suggestionsList.querySelector('li');
+                if (selectedSuggestion) {
+                    insertSuggestion(selectedSuggestion.textContent);
+                }
+            }
+            else if (event.key === 'Enter' && currentSelection !== -1) {
+                event.preventDefault();
+                const selectedSuggestion = suggestionsList.querySelector('li.selected');
+                if (selectedSuggestion) {
+                    insertSuggestion(selectedSuggestion.textContent);
+                }
+            }
+            else if (event.key === 'Escape') {
+                suggestionsList.style.display = 'none';
+            }
+            else if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && suggestionsList.style.display !== 'none') {
+                event.preventDefault();
+                navigateSuggestions(event.key === 'ArrowDown' ? 1 : -1);
+            }
+            autoResize();
+        }
+
+        function handleKeyUp(event) {
+            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                return;
+            }
+            updateSuggestions();
+        }
+
+        function navigateSuggestions(direction) {
+            currentSelection = (currentSelection + direction + suggestionsList.childElementCount) % suggestionsList.childElementCount;
+            updateSelection();
+        }
+
+        function handleClickOutside(event) {
+            if (!event.target.closest('.autocomplete')) {
+                suggestionsList.style.display = 'none';
+            }
+        }
+
+        function updateSuggestions() {
+            const caretPosition = inputField.selectionStart;
+            const words = inputField.value.substring(0, caretPosition).split(/\s+/);
+            const currentWord = words[words.length - 1].toLowerCase();
+            const suggestions = currentWord.length >= 2 ? wordList.filter(word => word.startsWith(currentWord) && word !== currentWord) : [];
+            currentSelection = -1;
+            displaySuggestions(suggestions, currentWord);
+        }
+
+        inputField.addEventListener('keydown', handleKeyDown);
+        inputField.addEventListener('keyup', handleKeyUp);
+        inputField.addEventListener('input', updateSuggestions);
+        submitButton.addEventListener('click', () => {
+            suggestionsList.style.display = 'none';
+            submitButton.classList.add('submit-button-active');
+        });
+        document.addEventListener('click', handleClickOutside);
+    </script>
+</body>
+
+</html>
